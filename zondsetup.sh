@@ -9,10 +9,24 @@ green_echo "[+] Welcome to the Zond Setup Script an effort by @DigitalGuards"
 green_echo "[+] This script will install the Zond Execution Engine and Qrysm Consensus Engine"
 green_echo "[+] This currently assumes Go is already installed on the system"
 
-# Install required packages
-sudo apt-get update
-sudo apt-get upgrade -y
-sudo apt-get install -y build-essential screen tmux curl wget git
+# Detect OS
+OS="$(uname)"
+
+# Install required packages based on OS
+if [ "$OS" = "Darwin" ]; then
+    # Check if Homebrew is installed
+    if ! command -v brew &>/dev/null; then
+        green_echo "[+] Installing Homebrew..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    fi
+    green_echo "[+] Installing required packages with Homebrew..."
+    brew install screen tmux curl wget git
+else
+    green_echo "[+] Installing required packages with apt-get..."
+    sudo apt-get update
+    sudo apt-get upgrade -y
+    sudo apt-get install -y build-essential screen tmux curl wget git
+fi
 green_echo "[+] Installed build essentials and required tools"
 
 # Check for gobrew installation and install if needed
@@ -22,12 +36,17 @@ if ! command -v gobrew &>/dev/null; then
     # Add to current session
     export PATH="$HOME/.gobrew/bin:$PATH"
     export PATH="$HOME/.gobrew/current/go/bin:$PATH"
-    # Add to bashrc if not already present
-    if ! grep -q "/.gobrew/bin" ~/.bashrc; then
-        echo 'export PATH="$HOME/.gobrew/bin:$PATH"' >> ~/.bashrc
+    # Add to shell config based on OS
+    if [ "$OS" = "Darwin" ]; then
+        SHELL_CONFIG="$HOME/.zshrc"
+    else
+        SHELL_CONFIG="$HOME/.bashrc"
     fi
-    if ! grep -q "/.gobrew/current/go/bin" ~/.bashrc; then
-        echo 'export PATH="$HOME/.gobrew/current/go/bin:$PATH"' >> ~/.bashrc
+    if ! grep -q "/.gobrew/bin" "$SHELL_CONFIG"; then
+        echo 'export PATH="$HOME/.gobrew/bin:$PATH"' >> "$SHELL_CONFIG"
+    fi
+    if ! grep -q "/.gobrew/current/go/bin" "$SHELL_CONFIG"; then
+        echo 'export PATH="$HOME/.gobrew/current/go/bin:$PATH"' >> "$SHELL_CONFIG"
     fi
     green_echo "[+] gobrew installed successfully"
 else
@@ -43,8 +62,12 @@ fi
 
 # Install Node.js and pm2 if not already installed
 if ! command -v node &>/dev/null; then
-    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-    sudo apt-get install -y nodejs
+    if [ "$OS" = "Darwin" ]; then
+        brew install node
+    else
+        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+    fi
     sudo npm install -g pm2
     green_echo "[+] Installed Node.js and pm2"
 fi
@@ -71,19 +94,23 @@ green_echo "[+] Using $PROCESS_MANAGER as process manager"
 # Check if ~/theQRL directory exists
 if [ -d "$HOME/theQRL" ]; then
     echo "Directory ~/theQRL already exists. Removing it to start fresh."
-    rm -rf "$HOME/theQRL"
+    if [ "$OS" = "Darwin" ]; then
+        rm -rf "$HOME/theQRL"/*
+    else
+        rm -rf "$HOME/theQRL"
+    fi
     case $PROCESS_MANAGER in
         "screen")
-            screen -X -S crysm quit
-            screen -X -S zond quit
+            screen -X -S crysm quit 2>/dev/null || true
+            screen -X -S zond quit 2>/dev/null || true
             ;;
         "tmux")
-            tmux kill-session -t crysm 2>/dev/null
-            tmux kill-session -t zond 2>/dev/null
+            tmux kill-session -t crysm 2>/dev/null || true
+            tmux kill-session -t zond 2>/dev/null || true
             ;;
         "pm2")
-            pm2 delete crysm 2>/dev/null
-            pm2 delete zond 2>/dev/null
+            pm2 delete crysm 2>/dev/null || true
+            pm2 delete zond 2>/dev/null || true
             ;;
     esac
 fi
@@ -91,18 +118,29 @@ fi
 mkdir -p ~/theQRL
 cd ~/theQRL
 
-command -v wget &>/dev/null && echo "wget is already installed, continuing..." || { echo "wget not found, installing..."; sudo apt-get install -y wget; }
+# Update package installation checks to be OS-aware
+if ! command -v wget &>/dev/null; then
+    if [ "$OS" = "Darwin" ]; then
+        brew install wget
+    else
+        sudo apt-get install -y wget
+    fi
+fi
+
+if ! command -v git &>/dev/null; then
+    if [ "$OS" = "Darwin" ]; then
+        brew install git
+    else
+        sudo apt-get install -y git
+    fi
+fi
+
 command -v gobrew &>/dev/null && echo "gobrew is already installed." || { echo "gobrew is not installed. Installing now."; wget -O - https://git.io/gobrew | sh; }
-echo 'export PATH="$HOME/.gobrew/bin:$PATH"' >> ~/.bashrc
-echo 'export PATH="$HOME/.gobrew/current/go/bin:$PATH' >> ~/.bashrc
-export PATH="$HOME/.gobrew/bin:$PATH"
-export PATH="$HOME/.gobrew/current/go/bin:$PATH"
 
 gobrew install 1.21.5
 gobrew install 1.20.12
 green_echo "[+] Finished installing gobrew"
 
-command -v git &>/dev/null && echo "git is already installed, continuing..." || { echo "git not found, installing..."; sudo apt-get install -y git; }
 git clone https://github.com/theQRL/go-zond.git
 git clone https://github.com/theQRL/qrysm.git
 green_echo "[+] Cloned latest version of zond"
