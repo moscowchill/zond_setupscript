@@ -1,0 +1,9 @@
+qrysmctl
+beacon-chain
+validator
+gzond
+genesis.ssz
+config.yml
+go-zond/
+gozond.log
+qrysm/

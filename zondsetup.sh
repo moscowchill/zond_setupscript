@@ -1,8 +1,16 @@
 #!/bin/bash
-GREEN="\e[32m"
-RESET="\e[0m"
+
+# Fix color output for both bash and zsh
+if [[ "$SHELL" == *"zsh"* ]]; then
+    GREEN=$'\e[32m'
+    RESET=$'\e[0m'
+else
+    GREEN="\e[32m"
+    RESET="\e[0m"
+fi
+
 green_echo() {
-  echo -e "${GREEN}$1${RESET}"
+    echo -e "${GREEN}$1${RESET}"
 }
 
 green_echo "[+] Welcome to the Zond Setup Script an effort by @DigitalGuards"
@@ -33,109 +41,16 @@ green_echo "[+] Installed build essentials and required tools"
 if ! command -v gobrew &>/dev/null; then
     green_echo "[+] gobrew not found, installing..."
     wget -O - https://git.io/gobrew | sh
-    # Add to current session
-    export PATH="$HOME/.gobrew/bin:$PATH"
-    export PATH="$HOME/.gobrew/current/go/bin:$PATH"
-    # Add to shell config based on OS
-    if [ "$OS" = "Darwin" ]; then
-        SHELL_CONFIG="$HOME/.zshrc"
-    else
-        SHELL_CONFIG="$HOME/.bashrc"
-    fi
-    if ! grep -q "/.gobrew/bin" "$SHELL_CONFIG"; then
-        echo 'export PATH="$HOME/.gobrew/bin:$PATH"' >> "$SHELL_CONFIG"
-    fi
-    if ! grep -q "/.gobrew/current/go/bin" "$SHELL_CONFIG"; then
-        echo 'export PATH="$HOME/.gobrew/current/go/bin:$PATH"' >> "$SHELL_CONFIG"
-    fi
     green_echo "[+] gobrew installed successfully"
 else
     green_echo "[+] gobrew is already installed"
 fi
 
-# Verify gobrew is working
-if ! gobrew --version &>/dev/null; then
-    green_echo "[!] Error: gobrew installation failed or PATH not set correctly"
-    green_echo "[!] Please restart your terminal and run the script again"
-    exit 1
+# Ensure gobrew is in PATH for current session
+if [ -d "$HOME/.gobrew" ]; then
+    export PATH="$HOME/.gobrew/bin:$PATH"
+    export PATH="$HOME/.gobrew/current/go/bin:$PATH"
 fi
-
-# Install Node.js and pm2 if not already installed
-if ! command -v node &>/dev/null; then
-    if [ "$OS" = "Darwin" ]; then
-        brew install node
-    else
-        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-        sudo apt-get install -y nodejs
-    fi
-    sudo npm install -g pm2
-    green_echo "[+] Installed Node.js and pm2"
-fi
-
-# Function to choose process manager
-choose_process_manager() {
-    echo "Please choose your preferred process manager:"
-    echo "1) screen (default)"
-    echo "2) tmux"
-    echo "3) pm2"
-    read -p "Enter your choice (1-3): " choice
-    
-    case $choice in
-        2) echo "tmux";;
-        3) echo "pm2";;
-        *) echo "screen";;
-    esac
-}
-
-# Get user's preferred process manager
-PROCESS_MANAGER=$(choose_process_manager)
-green_echo "[+] Using $PROCESS_MANAGER as process manager"
-
-# Check if ~/theQRL directory exists
-if [ -d "$HOME/theQRL" ]; then
-    echo "Directory ~/theQRL already exists. Removing it to start fresh."
-    if [ "$OS" = "Darwin" ]; then
-        rm -rf "$HOME/theQRL"/*
-    else
-        rm -rf "$HOME/theQRL"
-    fi
-    case $PROCESS_MANAGER in
-        "screen")
-            screen -X -S crysm quit 2>/dev/null || true
-            screen -X -S zond quit 2>/dev/null || true
-            ;;
-        "tmux")
-            tmux kill-session -t crysm 2>/dev/null || true
-            tmux kill-session -t zond 2>/dev/null || true
-            ;;
-        "pm2")
-            pm2 delete crysm 2>/dev/null || true
-            pm2 delete zond 2>/dev/null || true
-            ;;
-    esac
-fi
-
-mkdir -p ~/theQRL
-cd ~/theQRL
-
-# Update package installation checks to be OS-aware
-if ! command -v wget &>/dev/null; then
-    if [ "$OS" = "Darwin" ]; then
-        brew install wget
-    else
-        sudo apt-get install -y wget
-    fi
-fi
-
-if ! command -v git &>/dev/null; then
-    if [ "$OS" = "Darwin" ]; then
-        brew install git
-    else
-        sudo apt-get install -y git
-    fi
-fi
-
-command -v gobrew &>/dev/null && echo "gobrew is already installed." || { echo "gobrew is not installed. Installing now."; wget -O - https://git.io/gobrew | sh; }
 
 gobrew install 1.21.5
 gobrew install 1.20.12
@@ -145,29 +60,115 @@ git clone https://github.com/theQRL/go-zond.git
 git clone https://github.com/theQRL/qrysm.git
 green_echo "[+] Cloned latest version of zond"
 
+# Build zond and qrysm first
 gobrew use 1.21.5
 cd go-zond/
-make gzond
-cp build/bin/gzond ../
+
+# Build gzond with explicit go build command and macOS-specific flags
+green_echo "[+] Building gzond..."
+if [ "$OS" = "Darwin" ]; then
+    # Create build directory if it doesn't exist
+    mkdir -p build/bin
+    
+    # macOS specific build command with additional flags
+    GOARCH=arm64 CGO_ENABLED=1 go build \
+        -o build/bin/gzond \
+        -ldflags "-s -w -X github.com/theQRL/go-zond/internal/version.gitCommit=$(git rev-parse HEAD) -X github.com/theQRL/go-zond/internal/version.gitDate=$(date +%Y%m%d)" \
+        -tags "urfave_cli_no_docs,ckzg" \
+        -gcflags=all="-B" \
+        ./cmd/gzond || {
+            green_echo "[!] Error: Failed to build gzond"
+            green_echo "[!] Build output:"
+            GOARCH=arm64 CGO_ENABLED=1 go build -v ./cmd/gzond
+            exit 1
+        }
+else
+    # Linux build command
+    go build -o build/bin/gzond \
+        -ldflags "-X github.com/theQRL/go-zond/internal/version.gitCommit=$(git rev-parse HEAD) -X github.com/theQRL/go-zond/internal/version.gitDate=$(date +%Y%m%d)" \
+        -tags "urfave_cli_no_docs,ckzg" \
+        -trimpath \
+        ./cmd/gzond
+fi
+
+# Verify the binary was created
+if [ ! -f "build/bin/gzond" ]; then
+    green_echo "[!] Error: gzond binary was not created"
+    exit 1
+fi
+
+GZOND_PATH="$PWD/build/bin/gzond"
 cd ..
 green_echo "[+] Finished building the go-zond Execution Engine"
 
 cd qrysm/
 gobrew use 1.20.12
-go build -o=../qrysmctl ./cmd/qrysmctl
-go build -o=../beacon-chain ./cmd/beacon-chain
-go build -o=../validator ./cmd/validator
+
+# Build qrysm binaries with error checking
+green_echo "[+] Building qrysm binaries..."
+go build -o=../qrysmctl ./cmd/qrysmctl || { green_echo "[!] Error building qrysmctl"; exit 1; }
+BEACON_PATH="$PWD/../beacon-chain"
+go build -o="$BEACON_PATH" ./cmd/beacon-chain || { green_echo "[!] Error building beacon-chain"; exit 1; }
+go build -o=../validator ./cmd/validator || { green_echo "[!] Error building validator"; exit 1; }
+
 cd ..
 green_echo "[+] Finished building the Qrysm Consensus Engine"
 
 green_echo "[+] Pulling zond Config Files"
-wget https://github.com/theQRL/go-zond-metadata/raw/main/testnet/betanet/config.yml -P ~/theQRL
-wget https://github.com/theQRL/go-zond-metadata/raw/main/testnet/betanet/genesis.ssz -P ~/theQRL
+wget https://github.com/theQRL/go-zond-metadata/raw/main/testnet/betanet/config.yml
+wget https://github.com/theQRL/go-zond-metadata/raw/main/testnet/betanet/genesis.ssz
 
-green_echo "[+] Zond node starting in $PROCESS_MANAGER session."
+green_echo "[+] All dependencies and builds completed successfully"
+green_echo "[+] Now we need to choose how to run the nodes"
+
+# Function to choose process manager
+choose_process_manager() {
+    echo ""
+    echo "The Zond and Crysm nodes need to run as background processes."
+    echo "Please choose which process manager you want to use:"
+    echo ""
+    echo "1) screen - Simple terminal multiplexer (default)"
+    echo "2) tmux   - Terminal multiplexer with more features"
+    echo "3) pm2    - Process manager with monitoring"
+    echo ""
+    
+    local choice
+    read -p "Enter your choice (1-3): " choice
+    
+    case $choice in
+        2) PROCESS_MANAGER="tmux";;
+        3) PROCESS_MANAGER="pm2";;
+        *) PROCESS_MANAGER="screen";;
+    esac
+}
+
+# Get user's preferred process manager
+PROCESS_MANAGER=""
+choose_process_manager
+green_echo "[+] Using $PROCESS_MANAGER to manage the node processes"
+
+# Clean up any existing processes
+green_echo "[+] Cleaning up any existing node processes..."
 case $PROCESS_MANAGER in
     "screen")
-        screen -dmS zond ./gzond \
+        screen -X -S crysm quit 2>/dev/null || true
+        screen -X -S zond quit 2>/dev/null || true
+        ;;
+    "tmux")
+        tmux kill-session -t crysm 2>/dev/null || true
+        tmux kill-session -t zond 2>/dev/null || true
+        ;;
+    "pm2")
+        pm2 delete crysm 2>/dev/null || true
+        pm2 delete zond 2>/dev/null || true
+        ;;
+esac
+
+green_echo "[+] Starting Zond node in $PROCESS_MANAGER session..."
+
+case $PROCESS_MANAGER in
+    "screen")
+        screen -dmS zond "$GZOND_PATH" \
             --log.file gozond.log \
             --nat=extip:0.0.0.0 \
             --betanet \
@@ -178,7 +179,7 @@ case $PROCESS_MANAGER in
             --snapshot=false
         ;;
     "tmux")
-        tmux new-session -d -s zond "./gzond \
+        tmux new-session -d -s zond "$GZOND_PATH \
             --log.file gozond.log \
             --nat=extip:0.0.0.0 \
             --betanet \
@@ -189,7 +190,7 @@ case $PROCESS_MANAGER in
             --snapshot=false"
         ;;
     "pm2")
-        pm2 start ./gzond --name zond -- \
+        pm2 start "$GZOND_PATH" --name zond -- \
             --log.file gozond.log \
             --nat=extip:0.0.0.0 \
             --betanet \
@@ -211,13 +212,13 @@ green_echo "[+] Crysm consensus engine now starting"
 
 case $PROCESS_MANAGER in
     "screen")
-        screen -dmS crysm ./beacon-chain \
+        screen -dmS crysm "$BEACON_PATH" \
             --log-file crysm.log --log-format text \
             --datadir=beacondata \
             --min-sync-peers=1 \
-            --genesis-state=genesis.ssz \
-            --chain-config-file=config.yml \
-            --config-file=config.yml \
+            --genesis-state="$PWD/genesis.ssz" \
+            --chain-config-file="$PWD/config.yml" \
+            --config-file="$PWD/config.yml" \
             --chain-id=32382 \
             --execution-endpoint=http://localhost:8551 \
             --accept-terms-of-use \
@@ -229,13 +230,13 @@ case $PROCESS_MANAGER in
             --bootstrap-node "enr:-MK4QOiaZeOWRnUyxfJv0lTbvjh-Re4zfDBW7vNWl9wIW7n8OWzMmxhy8IVHgRF7QZrkm7OGShDogEYUtdg8Bt1nIqaGAY0sFwP7h2F0dG5ldHOIAAAAAAAAAACEZXRoMpDeYa1-IAAAk___________gmlkgnY0gmlwhC0g6p2Jc2VjcDI1NmsxoQK6I2IsSSRwnOtpsnzhgACTRfYZqUQ1aTsw-K4qMR_2BohzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A"
         ;;
     "tmux")
-        tmux new-session -d -s crysm "./beacon-chain \
+        tmux new-session -d -s crysm "$BEACON_PATH \
             --log-file crysm.log --log-format text \
             --datadir=beacondata \
             --min-sync-peers=1 \
-            --genesis-state=genesis.ssz \
-            --chain-config-file=config.yml \
-            --config-file=config.yml \
+            --genesis-state="$PWD/genesis.ssz" \
+            --chain-config-file="$PWD/config.yml" \
+            --config-file="$PWD/config.yml" \
             --chain-id=32382 \
             --execution-endpoint=http://localhost:8551 \
             --accept-terms-of-use \
@@ -247,13 +248,13 @@ case $PROCESS_MANAGER in
             --bootstrap-node 'enr:-MK4QOiaZeOWRnUyxfJv0lTbvjh-Re4zfDBW7vNWl9wIW7n8OWzMmxhy8IVHgRF7QZrkm7OGShDogEYUtdg8Bt1nIqaGAY0sFwP7h2F0dG5ldHOIAAAAAAAAAACEZXRoMpDeYa1-IAAAk___________gmlkgnY0gmlwhC0g6p2Jc2VjcDI1NmsxoQK6I2IsSSRwnOtpsnzhgACTRfYZqUQ1aTsw-K4qMR_2BohzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A'"
         ;;
     "pm2")
-        pm2 start ./beacon-chain --name crysm -- \
+        pm2 start "$BEACON_PATH" --name crysm -- \
             --log-file crysm.log --log-format text \
             --datadir=beacondata \
             --min-sync-peers=1 \
-            --genesis-state=genesis.ssz \
-            --chain-config-file=config.yml \
-            --config-file=config.yml \
+            --genesis-state="$PWD/genesis.ssz" \
+            --chain-config-file="$PWD/config.yml" \
+            --config-file="$PWD/config.yml" \
             --chain-id=32382 \
             --execution-endpoint=http://localhost:8551 \
             --accept-terms-of-use \
