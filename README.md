@@ -1,13 +1,41 @@
-Setup script to run go-zond and crysm in screen sessions and log their outputs into files.
+# Zond Node Setup Script
 
-Compatible with both Linux and macOS systems. For macOS, the script will automatically install required dependencies using Homebrew.
+A setup script to run go-zond (execution client) and crysm (consensus client) nodes in background processes.
 
-Requirements:
-- For Linux: bash shell
-- For macOS: bash or zsh shell
+## Features
 
-This script will install required dependencies including Go if not already present on the system.
+- Automatic installation of required dependencies
+- Support for multiple process managers:
+  - screen (simple terminal multiplexer)
+  - tmux (advanced terminal multiplexer)
+  - pm2 (process manager with monitoring)
+- Cross-platform compatibility:
+  - Linux (Debian/Ubuntu)
+  - macOS (Intel/ARM)
+- Automatic Go version management with gobrew
+- Error handling and status updates
 
-https://github.com/theQRL/go-zond
+## Prerequisites
 
-https://github.com/theQRL/qrysm
+- Linux (Debian/Ubuntu) or macOS
+- bash or zsh shell
+- Internet connection
+- Basic command line knowledge
+
+## Usage
+
+- Clone the repository
+```
+git clone https://github.com/theQRL/zond_setupscript.git
+cd zond_setupscript
+```
+
+- Make the script executable
+```
+chmod +x zondsetup.sh
+```
+
+- Run the script
+```
+./zondsetup.sh  
+```

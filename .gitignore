@@ -7,3 +7,8 @@ config.yml
 go-zond/
 gozond.log
 qrysm/
+crysm.log
+beacondata/tosaccepted
+beacondata/network-keys
+beacondata/metaData
+beacondata/beaconchaindata/beaconchain.db
