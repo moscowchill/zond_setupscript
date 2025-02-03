@@ -14,6 +14,9 @@ A setup script to run go-zond (execution client) and crysm (consensus client) no
   - macOS (Intel/ARM)
 - Automatic Go version management with gobrew
 - Error handling and status updates
+- **Two operation modes:**
+  - **Full setup:** Installs dependencies, clones repositories, builds binaries, and launches nodes.
+  - **Restart nodes:** Skips dependency checks and rebuilds; only restarts the node processes (useful after a reboot).
 
 ## Prerequisites
 
@@ -37,5 +40,12 @@ chmod +x zondsetup.sh
 
 - Run the script
 ```
-./zondsetup.sh  
+./zondsetup.sh
 ```
+
+When you run the script, you will be prompted to choose a mode:
+
+- **Full setup:** Performs dependency installation, cloning, and building of binaries before launching the nodes.
+- **Restart nodes:** Skips the full setup steps and only launches the node processes (ideal when the nodes have stopped, e.g., after a reboot).
+
+Happy node running!

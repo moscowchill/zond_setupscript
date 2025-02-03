@@ -17,111 +17,133 @@ green_echo "[+] Welcome to the Zond Setup Script an effort by @DigitalGuards"
 green_echo "[+] This script will install the Zond Execution Engine and Qrysm Consensus Engine"
 green_echo "[+] This currently assumes Go is already installed on the system"
 
-# Detect OS
-OS="$(uname)"
+# --- New code: Mode Selection ---
+echo ""
+echo "Select mode:"
+echo "1) Full setup - Install dependencies, build binaries and launch nodes"
+echo "2) Restart nodes - Launch only the node processes (skip dependency checks and builds)"
+read -p "Enter your choice (1 or 2): " RUN_MODE
 
-# Install required packages based on OS
-if [ "$OS" = "Darwin" ]; then
-    # Check if Homebrew is installed
-    if ! command -v brew &>/dev/null; then
-        green_echo "[+] Installing Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+if [ "$RUN_MODE" == "2" ]; then
+    RESTART_MODE=1
+else
+    RESTART_MODE=0
+fi
+
+if [ "$RESTART_MODE" -eq 1 ]; then
+    # In restart mode, verify that required binaries exist
+    if [ ! -f "$PWD/go-zond/build/bin/gzond" ]; then
+        green_echo "[!] Error: gzond binary not found. Please run full setup first."
+        exit 1
     fi
-    green_echo "[+] Installing required packages with Homebrew..."
-    brew install screen tmux curl wget git
-else
-    green_echo "[+] Installing required packages with apt-get..."
-    sudo apt-get update
-    sudo apt-get upgrade -y
-    sudo apt-get install -y build-essential screen tmux curl wget git
-fi
-green_echo "[+] Installed build essentials and required tools"
-
-# Check for gobrew installation and install if needed
-if ! command -v gobrew &>/dev/null; then
-    green_echo "[+] gobrew not found, installing..."
-    wget -O - https://git.io/gobrew | sh
-    green_echo "[+] gobrew installed successfully"
-else
-    green_echo "[+] gobrew is already installed"
+    if [ ! -f "$PWD/beacon-chain" ]; then
+        green_echo "[!] Error: beacon-chain binary not found. Please run full setup first."
+        exit 1
+    fi
+    GZOND_PATH="$PWD/go-zond/build/bin/gzond"
+    BEACON_PATH="$PWD/beacon-chain"
+    green_echo "[+] Restart mode selected. Skipping full setup and building binaries."
 fi
 
-# Ensure gobrew is in PATH for current session
-if [ -d "$HOME/.gobrew" ]; then
-    export PATH="$HOME/.gobrew/bin:$PATH"
-    export PATH="$HOME/.gobrew/current/go/bin:$PATH"
-fi
-
-gobrew install 1.21.5
-gobrew install 1.20.12
-green_echo "[+] Finished installing gobrew"
-
-git clone https://github.com/theQRL/go-zond.git
-git clone https://github.com/theQRL/qrysm.git
-green_echo "[+] Cloned latest version of zond"
-
-# Build zond and qrysm first
-gobrew use 1.21.5
-cd go-zond/
-
-# Build gzond with explicit go build command and macOS-specific flags
-green_echo "[+] Building gzond..."
-if [ "$OS" = "Darwin" ]; then
-    # Create build directory if it doesn't exist
-    mkdir -p build/bin
+if [ "$RESTART_MODE" -eq 0 ]; then
+    # --- Full setup: dependency installation, cloning, and building binaries ---
     
-    # macOS specific build command with additional flags
-    GOARCH=arm64 CGO_ENABLED=1 go build \
-        -o build/bin/gzond \
-        -ldflags "-s -w -X github.com/theQRL/go-zond/internal/version.gitCommit=$(git rev-parse HEAD) -X github.com/theQRL/go-zond/internal/version.gitDate=$(date +%Y%m%d)" \
-        -tags "urfave_cli_no_docs,ckzg" \
-        -gcflags=all="-B" \
-        ./cmd/gzond || {
-            green_echo "[!] Error: Failed to build gzond"
-            green_echo "[!] Build output:"
-            GOARCH=arm64 CGO_ENABLED=1 go build -v ./cmd/gzond
-            exit 1
-        }
-else
-    # Linux build command
-    go build -o build/bin/gzond \
-        -ldflags "-X github.com/theQRL/go-zond/internal/version.gitCommit=$(git rev-parse HEAD) -X github.com/theQRL/go-zond/internal/version.gitDate=$(date +%Y%m%d)" \
-        -tags "urfave_cli_no_docs,ckzg" \
-        -trimpath \
-        ./cmd/gzond
+    # Detect OS
+    OS="$(uname)"
+
+    # Install required packages based on OS
+    if [ "$OS" = "Darwin" ]; then
+        if ! command -v brew &>/dev/null; then
+            green_echo "[+] Installing Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        fi
+        green_echo "[+] Installing required packages with Homebrew..."
+        brew install screen tmux curl wget git
+    else
+        green_echo "[+] Installing required packages with apt-get..."
+        sudo apt-get update
+        sudo apt-get upgrade -y
+        sudo apt-get install -y build-essential screen tmux curl wget git
+    fi
+    green_echo "[+] Installed build essentials and required tools"
+
+    # Check for gobrew installation and install if needed
+    if ! command -v gobrew &>/dev/null; then
+        green_echo "[+] gobrew not found, installing..."
+        wget -O - https://git.io/gobrew | sh
+        green_echo "[+] gobrew installed successfully"
+    else
+        green_echo "[+] gobrew is already installed"
+    fi
+
+    if [ -d "$HOME/.gobrew" ]; then
+        export PATH="$HOME/.gobrew/bin:$PATH"
+        export PATH="$HOME/.gobrew/current/go/bin:$PATH"
+    fi
+
+    gobrew install 1.21.5
+    gobrew install 1.20.12
+    green_echo "[+] Finished installing gobrew"
+
+    git clone https://github.com/theQRL/go-zond.git
+    git clone https://github.com/theQRL/qrysm.git
+    green_echo "[+] Cloned latest version of zond"
+
+    # Build zond and qrysm first
+    gobrew use 1.21.5
+    cd go-zond/
+
+    green_echo "[+] Building gzond..."
+    if [ "$OS" = "Darwin" ]; then
+        mkdir -p build/bin
+        GOARCH=arm64 CGO_ENABLED=1 go build \
+            -o build/bin/gzond \
+            -ldflags "-s -w -X github.com/theQRL/go-zond/internal/version.gitCommit=$(git rev-parse HEAD) -X github.com/theQRL/go-zond/internal/version.gitDate=$(date +%Y%m%d)" \
+            -tags "urfave_cli_no_docs,ckzg" \
+            -gcflags=all="-B" \
+            ./cmd/gzond || {
+                green_echo "[!] Error: Failed to build gzond"
+                green_echo "[!] Build output:"
+                GOARCH=arm64 CGO_ENABLED=1 go build -v ./cmd/gzond
+                exit 1
+            }
+    else
+        go build -o build/bin/gzond \
+            -ldflags "-X github.com/theQRL/go-zond/internal/version.gitCommit=$(git rev-parse HEAD) -X github.com/theQRL/go-zond/internal/version.gitDate=$(date +%Y%m%d)" \
+            -tags "urfave_cli_no_docs,ckzg" \
+            -trimpath \
+            ./cmd/gzond
+    fi
+
+    if [ ! -f "build/bin/gzond" ]; then
+        green_echo "[!] Error: gzond binary was not created"
+        exit 1
+    fi
+    GZOND_PATH="$PWD/build/bin/gzond"
+    cd ..
+    green_echo "[+] Finished building the go-zond Execution Engine"
+
+    cd qrysm/
+    gobrew use 1.20.12
+
+    green_echo "[+] Building qrysm binaries..."
+    go build -o=../qrysmctl ./cmd/qrysmctl || { green_echo "[!] Error building qrysmctl"; exit 1; }
+    BEACON_PATH="$PWD/../beacon-chain"
+    go build -o="$BEACON_PATH" ./cmd/beacon-chain || { green_echo "[!] Error building beacon-chain"; exit 1; }
+    go build -o=../validator ./cmd/validator || { green_echo "[!] Error building validator"; exit 1; }
+    cd ..
+    green_echo "[+] Finished building the Qrysm Consensus Engine"
+
+    green_echo "[+] Pulling zond Config Files"
+    wget https://github.com/theQRL/go-zond-metadata/raw/main/testnet/betanet/config.yml
+    wget https://github.com/theQRL/go-zond-metadata/raw/main/testnet/betanet/genesis.ssz
+
+    green_echo "[+] All dependencies and builds completed successfully"
 fi
 
-# Verify the binary was created
-if [ ! -f "build/bin/gzond" ]; then
-    green_echo "[!] Error: gzond binary was not created"
-    exit 1
-fi
-
-GZOND_PATH="$PWD/build/bin/gzond"
-cd ..
-green_echo "[+] Finished building the go-zond Execution Engine"
-
-cd qrysm/
-gobrew use 1.20.12
-
-# Build qrysm binaries with error checking
-green_echo "[+] Building qrysm binaries..."
-go build -o=../qrysmctl ./cmd/qrysmctl || { green_echo "[!] Error building qrysmctl"; exit 1; }
-BEACON_PATH="$PWD/../beacon-chain"
-go build -o="$BEACON_PATH" ./cmd/beacon-chain || { green_echo "[!] Error building beacon-chain"; exit 1; }
-go build -o=../validator ./cmd/validator || { green_echo "[!] Error building validator"; exit 1; }
-
-cd ..
-green_echo "[+] Finished building the Qrysm Consensus Engine"
-
-green_echo "[+] Pulling zond Config Files"
-wget https://github.com/theQRL/go-zond-metadata/raw/main/testnet/betanet/config.yml
-wget https://github.com/theQRL/go-zond-metadata/raw/main/testnet/betanet/genesis.ssz
-
-green_echo "[+] All dependencies and builds completed successfully"
+# --- Common: choose process manager and restart nodes ---
 green_echo "[+] Now we need to choose how to run the nodes"
 
-# Function to choose process manager
 choose_process_manager() {
     echo ""
     echo "The Zond and Crysm nodes need to run as background processes."
@@ -142,12 +164,10 @@ choose_process_manager() {
     esac
 }
 
-# Get user's preferred process manager
 PROCESS_MANAGER=""
 choose_process_manager
 green_echo "[+] Using $PROCESS_MANAGER to manage the node processes"
 
-# Clean up any existing processes
 green_echo "[+] Cleaning up any existing node processes..."
 case $PROCESS_MANAGER in
     "screen")
@@ -165,7 +185,6 @@ case $PROCESS_MANAGER in
 esac
 
 green_echo "[+] Starting Zond node in $PROCESS_MANAGER session..."
-
 case $PROCESS_MANAGER in
     "screen")
         screen -dmS zond "$GZOND_PATH" \
