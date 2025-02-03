@@ -239,6 +239,7 @@ case $PROCESS_MANAGER in
             --chain-config-file="$PWD/config.yml" \
             --config-file="$PWD/config.yml" \
             --chain-id=32382 \
+            --monitoring-port 9090 \
             --execution-endpoint=http://localhost:8551 \
             --accept-terms-of-use \
             --jwt-secret=gzonddata/gzond/jwtsecret \
@@ -253,10 +254,11 @@ case $PROCESS_MANAGER in
             --log-file crysm.log --log-format text \
             --datadir=beacondata \
             --min-sync-peers=1 \
-            --genesis-state="$PWD/genesis.ssz" \
-            --chain-config-file="$PWD/config.yml" \
-            --config-file="$PWD/config.yml" \
+            --genesis-state=\"$PWD/genesis.ssz\" \
+            --chain-config-file=\"$PWD/config.yml\" \
+            --config-file=\"$PWD/config.yml\" \
             --chain-id=32382 \
+            --monitoring-port 9090 \
             --execution-endpoint=http://localhost:8551 \
             --accept-terms-of-use \
             --jwt-secret=gzonddata/gzond/jwtsecret \
@@ -275,6 +277,7 @@ case $PROCESS_MANAGER in
             --chain-config-file="$PWD/config.yml" \
             --config-file="$PWD/config.yml" \
             --chain-id=32382 \
+            --monitoring-port 9090 \
             --execution-endpoint=http://localhost:8551 \
             --accept-terms-of-use \
             --jwt-secret=gzonddata/gzond/jwtsecret \
