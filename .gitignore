@@ -12,3 +12,12 @@ beacondata/tosaccepted
 beacondata/network-keys
 beacondata/metaData
 beacondata/beaconchaindata/beaconchain.db
+theQRL/beacondata/metaData
+theQRL/beacondata/network-keys
+theQRL/beacondata/tosaccepted
+theQRL/beacondata/beaconchaindata/beaconchain.db
+theQRL/gzonddata/.DS_Store
+theQRL/beacondata/.DS_Store
+theQRL/.DS_Store
+.DS_Store
+theQRL/qrysm.log

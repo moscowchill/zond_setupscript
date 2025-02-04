@@ -13,6 +13,11 @@ green_echo() {
     echo -e "${GREEN}$1${RESET}"
 }
 
+# Create and use theQRL directory for all node files
+QRLDIR="$PWD/theQRL"
+mkdir -p "$QRLDIR"
+cd "$QRLDIR"
+
 green_echo "[+] Welcome to the Zond Setup Script an effort by @DigitalGuards"
 green_echo "[+] This script will install the Zond Execution Engine and Qrysm Consensus Engine"
 green_echo "[+] This currently assumes Go is already installed on the system"
@@ -32,16 +37,16 @@ fi
 
 if [ "$RESTART_MODE" -eq 1 ]; then
     # In restart mode, verify that required binaries exist
-    if [ ! -f "$PWD/go-zond/build/bin/gzond" ]; then
+    if [ ! -f "$QRLDIR/go-zond/build/bin/gzond" ]; then
         green_echo "[!] Error: gzond binary not found. Please run full setup first."
         exit 1
     fi
-    if [ ! -f "$PWD/beacon-chain" ]; then
+    if [ ! -f "$QRLDIR/beacon-chain" ]; then
         green_echo "[!] Error: beacon-chain binary not found. Please run full setup first."
         exit 1
     fi
-    GZOND_PATH="$PWD/go-zond/build/bin/gzond"
-    BEACON_PATH="$PWD/beacon-chain"
+    GZOND_PATH="$QRLDIR/go-zond/build/bin/gzond"
+    BEACON_PATH="$QRLDIR/beacon-chain"
     green_echo "[+] Restart mode selected. Skipping full setup and building binaries."
 fi
 
@@ -146,7 +151,7 @@ green_echo "[+] Now we need to choose how to run the nodes"
 
 choose_process_manager() {
     echo ""
-    echo "The Zond and Crysm nodes need to run as background processes."
+    echo "The Zond and Qrysm nodes need to run as background processes."
     echo "Please choose which process manager you want to use:"
     echo ""
     echo "1) screen - Simple terminal multiplexer (default)"
@@ -171,15 +176,15 @@ green_echo "[+] Using $PROCESS_MANAGER to manage the node processes"
 green_echo "[+] Cleaning up any existing node processes..."
 case $PROCESS_MANAGER in
     "screen")
-        screen -X -S crysm quit 2>/dev/null || true
+        screen -X -S qrysm quit 2>/dev/null || true
         screen -X -S zond quit 2>/dev/null || true
         ;;
     "tmux")
-        tmux kill-session -t crysm 2>/dev/null || true
+        tmux kill-session -t qrysm 2>/dev/null || true
         tmux kill-session -t zond 2>/dev/null || true
         ;;
     "pm2")
-        pm2 delete crysm 2>/dev/null || true
+        pm2 delete qrysm 2>/dev/null || true
         pm2 delete zond 2>/dev/null || true
         ;;
 esac
@@ -188,56 +193,57 @@ green_echo "[+] Starting Zond node in $PROCESS_MANAGER session..."
 case $PROCESS_MANAGER in
     "screen")
         screen -dmS zond "$GZOND_PATH" \
-            --log.file gozond.log \
+            --log.file "$QRLDIR/gozond.log" \
             --nat=extip:0.0.0.0 \
             --betanet \
             --http \
             --http.api "web3,net,personal,zond,engine" \
-            --datadir=gzonddata \
+            --datadir="$QRLDIR/gzonddata" \
             --syncmode=full \
             --snapshot=false
         ;;
     "tmux")
         tmux new-session -d -s zond "$GZOND_PATH \
-            --log.file gozond.log \
+            --log.file \"$QRLDIR/gozond.log\" \
             --nat=extip:0.0.0.0 \
             --betanet \
             --http \
             --http.api 'web3,net,personal,zond,engine' \
-            --datadir=gzonddata \
+            --datadir=\"$QRLDIR/gzonddata\" \
             --syncmode=full \
             --snapshot=false"
         ;;
     "pm2")
         pm2 start "$GZOND_PATH" --name zond -- \
-            --log.file gozond.log \
+            --log.file "$QRLDIR/gozond.log" \
             --nat=extip:0.0.0.0 \
             --betanet \
             --http \
             --http.api "web3,net,personal,zond,engine" \
-            --datadir=gzonddata \
+            --datadir="$QRLDIR/gzonddata" \
             --syncmode=full \
             --snapshot=false
         ;;
 esac
 green_echo "[+] Zond started"
 
-green_echo "[+] Sleep for 10 seconds and launch ze crysm"
+green_echo "[+] Sleep for 10 seconds and launch ze qrysm"
 for i in {1000..1}; do
     printf "\r%.2f" $(bc <<< "scale=2; $i/100")
     sleep 0.01
 done
-green_echo "[+] Crysm consensus engine now starting"
+green_echo "[+] Qrysm consensus engine now starting"
 
 case $PROCESS_MANAGER in
     "screen")
-        screen -dmS crysm "$BEACON_PATH" \
-            --log-file crysm.log --log-format text \
-            --datadir=beacondata \
+        screen -dmS qrysm "$BEACON_PATH" \
+            --log-file "$QRLDIR/qrysm.log" \
+            --log-format text \
+            --datadir="$QRLDIR/beacondata" \
             --min-sync-peers=1 \
-            --genesis-state="$PWD/genesis.ssz" \
-            --chain-config-file="$PWD/config.yml" \
-            --config-file="$PWD/config.yml" \
+            --genesis-state="$QRLDIR/genesis.ssz" \
+            --chain-config-file="$QRLDIR/config.yml" \
+            --config-file="$QRLDIR/config.yml" \
             --chain-id=32382 \
             --monitoring-port 9090 \
             --execution-endpoint=http://localhost:8551 \
@@ -250,18 +256,18 @@ case $PROCESS_MANAGER in
             --bootstrap-node "enr:-MK4QOiaZeOWRnUyxfJv0lTbvjh-Re4zfDBW7vNWl9wIW7n8OWzMmxhy8IVHgRF7QZrkm7OGShDogEYUtdg8Bt1nIqaGAY0sFwP7h2F0dG5ldHOIAAAAAAAAAACEZXRoMpDeYa1-IAAAk___________gmlkgnY0gmlwhC0g6p2Jc2VjcDI1NmsxoQK6I2IsSSRwnOtpsnzhgACTRfYZqUQ1aTsw-K4qMR_2BohzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A"
         ;;
     "tmux")
-        tmux new-session -d -s crysm "$BEACON_PATH \
-            --log-file crysm.log --log-format text \
-            --datadir=beacondata \
+        tmux new-session -d -s qrysm "$BEACON_PATH \
+            --log-file \"$QRLDIR/qrysm.log\" --log-format text \
+            --datadir=\"$QRLDIR/beacondata\" \
             --min-sync-peers=1 \
-            --genesis-state=\"$PWD/genesis.ssz\" \
-            --chain-config-file=\"$PWD/config.yml\" \
-            --config-file=\"$PWD/config.yml\" \
+            --genesis-state=\"$QRLDIR/genesis.ssz\" \
+            --chain-config-file=\"$QRLDIR/config.yml\" \
+            --config-file=\"$QRLDIR/config.yml\" \
             --chain-id=32382 \
             --monitoring-port 9090 \
             --execution-endpoint=http://localhost:8551 \
             --accept-terms-of-use \
-            --jwt-secret=gzonddata/gzond/jwtsecret \
+            --jwt-secret=\"$QRLDIR/gzonddata/gzond/jwtsecret\" \
             --contract-deployment-block=0 \
             --minimum-peers-per-subnet=0 \
             --p2p-static-id \
@@ -269,18 +275,18 @@ case $PROCESS_MANAGER in
             --bootstrap-node 'enr:-MK4QOiaZeOWRnUyxfJv0lTbvjh-Re4zfDBW7vNWl9wIW7n8OWzMmxhy8IVHgRF7QZrkm7OGShDogEYUtdg8Bt1nIqaGAY0sFwP7h2F0dG5ldHOIAAAAAAAAAACEZXRoMpDeYa1-IAAAk___________gmlkgnY0gmlwhC0g6p2Jc2VjcDI1NmsxoQK6I2IsSSRwnOtpsnzhgACTRfYZqUQ1aTsw-K4qMR_2BohzeW5jbmV0cwCDdGNwgjLIg3VkcIIu4A'"
         ;;
     "pm2")
-        pm2 start "$BEACON_PATH" --name crysm -- \
-            --log-file crysm.log --log-format text \
-            --datadir=beacondata \
+        pm2 start "$BEACON_PATH" --name qrysm -- \
+            --log-file "$QRLDIR/qrysm.log" --log-format text \
+            --datadir="$QRLDIR/beacondata" \
             --min-sync-peers=1 \
-            --genesis-state="$PWD/genesis.ssz" \
-            --chain-config-file="$PWD/config.yml" \
-            --config-file="$PWD/config.yml" \
+            --genesis-state="$QRLDIR/genesis.ssz" \
+            --chain-config-file="$QRLDIR/config.yml" \
+            --config-file="$QRLDIR/config.yml" \
             --chain-id=32382 \
             --monitoring-port 9090 \
             --execution-endpoint=http://localhost:8551 \
             --accept-terms-of-use \
-            --jwt-secret=gzonddata/gzond/jwtsecret \
+            --jwt-secret="$QRLDIR/gzonddata/gzond/jwtsecret" \
             --contract-deployment-block=0 \
             --minimum-peers-per-subnet=0 \
             --p2p-static-id \
