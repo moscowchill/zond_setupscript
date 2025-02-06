@@ -234,6 +234,14 @@ for i in {1000..1}; do
 done
 green_echo "[+] Qrysm consensus engine now starting"
 
+# Conditionally define the genesis state argument.
+# Only include --genesis-state when doing a full setup (RESTART_MODE=0).
+if [ "$RESTART_MODE" -eq 0 ]; then
+    GENESIS_ARG="--genesis-state=$QRLDIR/genesis.ssz"
+else
+    GENESIS_ARG=""
+fi
+
 case $PROCESS_MANAGER in
     "screen")
         screen -dmS qrysm "$BEACON_PATH" \
@@ -241,7 +249,7 @@ case $PROCESS_MANAGER in
             --log-format text \
             --datadir="$QRLDIR/beacondata" \
             --min-sync-peers=1 \
-            --genesis-state="$QRLDIR/genesis.ssz" \
+            $GENESIS_ARG \
             --chain-config-file="$QRLDIR/config.yml" \
             --config-file="$QRLDIR/config.yml" \
             --chain-id=32382 \
@@ -260,7 +268,7 @@ case $PROCESS_MANAGER in
             --log-file \"$QRLDIR/qrysm.log\" --log-format text \
             --datadir=\"$QRLDIR/beacondata\" \
             --min-sync-peers=1 \
-            --genesis-state=\"$QRLDIR/genesis.ssz\" \
+            $GENESIS_ARG \
             --chain-config-file=\"$QRLDIR/config.yml\" \
             --config-file=\"$QRLDIR/config.yml\" \
             --chain-id=32382 \
@@ -279,7 +287,7 @@ case $PROCESS_MANAGER in
             --log-file "$QRLDIR/qrysm.log" --log-format text \
             --datadir="$QRLDIR/beacondata" \
             --min-sync-peers=1 \
-            --genesis-state="$QRLDIR/genesis.ssz" \
+            $GENESIS_ARG \
             --chain-config-file="$QRLDIR/config.yml" \
             --config-file="$QRLDIR/config.yml" \
             --chain-id=32382 \
